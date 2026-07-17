@@ -11,3 +11,6 @@ matplotlib
 plotly
 streamlit-folium
 folium
+pydeck
+numpy
+searoute

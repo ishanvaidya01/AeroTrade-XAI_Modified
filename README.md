@@ -95,4 +95,4 @@ AeroTrade XAI was built specifically to solve the AI "black box" problem. Every 
 4. **Automated Booking Execution**: Add a final "Book Now" capability that pushes the chosen route via API into an ERP/TMS system (like SAP).
 
 ## Team / Credits
-*Built by Antigravity*
+*Ishan Vaidya (25BCE1197) | Rishav Ghosh (25BCE1768)*

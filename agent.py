@@ -15,7 +15,7 @@ def get_llm():
             do_sample=False,
         )
         return ChatHuggingFace(llm=endpoint)
-    elif os.getenv("GEMINI_API_KEY"):
+    elif os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0)
     from langchain_openai import ChatOpenAI

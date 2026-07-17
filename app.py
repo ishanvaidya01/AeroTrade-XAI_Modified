@@ -120,7 +120,7 @@ if getattr(st.session_state, "run_triggered", False):
                 st.session_state.result = result
             
             with st.spinner("Agent generating self-critique..."):
-                st.session_state.critique = run_self_critique(result)
+                st.session_state.critique = run_self_critique(result, routes_dict)
                 
             progress_bar.empty()
             st.rerun()
@@ -150,7 +150,8 @@ if getattr(st.session_state, "run_triggered", False):
             render_executive_summary(st.session_state.result, routes_dict)
             
             if st.session_state.critique:
-                st.warning(f"**Self-Critique Auditor:** {st.session_state.critique}")
+                safe_critique = st.session_state.critique.replace("$", "\\$")
+                st.warning(f"**Self-Critique Auditor:** {safe_critique}")
                 
             st.subheader("Trade-off Matrix")
             render_tradeoff_matrix(st.session_state.result, selected_scenario["routes"], weights)

@@ -128,12 +128,14 @@ def render_rejection_panel(result: TradeOffResult, routes_dict: Dict[str, RouteO
     for rejected in result.rejected_routes:
         route_name = routes_dict.get(rejected.route_id, RouteOption(id="", name=rejected.route_id, mode="", origin="", destination="")).name
         with st.expander(f"Rejected Route: {route_name}"):
-            st.error(rejected.rejection_reason)
+            st.error(rejected.rejection_reason.replace("$", "\\$"))
 
 def render_executive_summary(result: TradeOffResult, routes_dict: Dict[str, RouteOption]):
     chosen_name = routes_dict.get(result.chosen_route_id, RouteOption(id="", name=result.chosen_route_id, mode="", origin="", destination="")).name
     st.success(f"**Recommended Action:** Proceed with **{chosen_name}**.")
-    st.write(result.justification)
+    # Escape $ signs so Streamlit doesn't render them as LaTeX math
+    safe_justification = result.justification.replace("$", "\\$")
+    st.write(safe_justification)
 
 def render_route_map(routes: List[RouteOption]):
     import pydeck as pdk

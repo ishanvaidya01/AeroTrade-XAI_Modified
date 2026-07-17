@@ -116,19 +116,120 @@ def run_agent(scenario: Dict[str, Any], routes: List[RouteOption], trace_callbac
                 fallback_messages.append(response)
                 fallback_messages.append(HumanMessage(content=f"Validation failed: {str(e)}. Please output ONLY valid JSON."))
 
+import re
+
 def _extract_text(content) -> str:
     if isinstance(content, str):
-        return content
+        text = content
     elif isinstance(content, list):
         texts = [c.get("text", "") for c in content if isinstance(c, dict) and "text" in c]
-        return " ".join(texts)
-    return str(content)
+        text = " ".join(texts)
+    else:
+        text = str(content)
+    # Robustly strip thinking blocks even if the opening <think> tag is missing
+    if "</think>" in text:
+        text = text.split("</think>")[-1]
+    
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    return text.strip()
 
-def run_self_critique(result: TradeOffResult) -> str:
-    llm = get_llm()
-    prompt = f"A skeptical auditor is reviewing this decision to choose {result.chosen_route_id}. The justification given was: '{result.justification}'. Find one primary weakness or risk in this justification. Do not be overly harsh, just analytical. Output exactly one short paragraph."
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return _extract_text(response.content)
+def run_self_critique(result: TradeOffResult, routes_dict: Dict[str, RouteOption] = None) -> str:
+    """Generate a data-driven self-critique by analyzing actual route scores.
+    This avoids the local LLM entirely for reliability and speed."""
+    
+    chosen_id = result.chosen_route_id
+    scores = result.route_scores
+    
+    # If we have no score data, return a generic but still useful critique
+    if not scores or chosen_id not in scores:
+        return (
+            "Without transparent scoring data, it is impossible to verify whether this route "
+            "was truly optimal or if the decision was influenced by incomplete information. "
+            "The absence of comparative metrics is itself a significant audit risk."
+        )
+    
+    chosen_scores = scores[chosen_id]
+    other_routes = {rid: s for rid, s in scores.items() if rid != chosen_id}
+    
+    if not other_routes:
+        return (
+            "Only one route was evaluated, making it impossible to confirm this was the best option. "
+            "A robust supply chain strategy requires evaluating multiple alternatives to avoid single-point-of-failure decisions."
+        )
+    
+    critiques = []
+    
+    # Mode-specific operational risk insights
+    mode_risks = {
+        "air": "Air freight, while fast, is highly exposed to fuel price volatility, airport congestion, and capacity crunches during peak seasons, making the projected cost far more volatile than the justification suggests.",
+        "sea": "Maritime shipping faces significant risks from port congestion, container shortages, and weather-induced delays that can extend transit times by weeks, undermining the reliability assumed in this justification.",
+        "rail": "Overland rail freight through multiple international borders introduces significant risks of customs bottlenecks, regulatory delays, and infrastructure disruptions that can easily derail the projected timeline.",
+        "road": "Overland trucking across multiple international borders introduces significant risks of customs bottlenecks, regulatory delays, and regional instability that can easily disrupt schedules and inflate costs, making the projected timeline and pricing far more volatile than the justification suggests.",
+        "sea-air": "The sea-air hybrid approach introduces a critical handoff point where cargo must be transshipped between modes, creating vulnerability to port delays, documentation mismatches, and coordination failures that compound transit time uncertainty.",
+        "sea-rail": "The sea-rail combination requires seamless intermodal transfers that are often disrupted by port-rail connectivity issues, gauge changes at borders, and misaligned scheduling between maritime and rail operators."
+    }
+    
+    # Check if chosen route has the HIGHEST cost
+    min_cost_route = min(other_routes.items(), key=lambda x: x[1].cost)
+    if min_cost_route[1].cost < chosen_scores.cost * 0.7:
+        savings_pct = round((1 - min_cost_route[1].cost / chosen_scores.cost) * 100)
+        critiques.append(
+            f"The justification overlooks that alternative route {min_cost_route[0]} offers approximately "
+            f"{savings_pct}% lower cost, raising serious questions about whether speed was overweighted "
+            f"at the expense of capital efficiency in the current evaluation."
+        )
+    
+    # Check if chosen route has high risk relative to alternatives
+    min_risk_route = min(other_routes.items(), key=lambda x: x[1].risk)
+    if chosen_scores.risk > min_risk_route[1].risk * 1.3:
+        critiques.append(
+            f"The chosen route carries a significantly elevated risk score compared to {min_risk_route[0]}, "
+            f"suggesting the decision underestimates operational disruption potential. In volatile geopolitical "
+            f"corridors, this risk differential could translate to costly delays and insurance premium spikes."
+        )
+    
+    # Check carbon footprint concerns
+    min_carbon_route = min(other_routes.items(), key=lambda x: x[1].carbon)
+    if chosen_scores.carbon > min_carbon_route[1].carbon * 2.0:
+        critiques.append(
+            f"The carbon footprint of the chosen route is more than double that of {min_carbon_route[0]}, "
+            f"which poses a material ESG compliance risk and could trigger carbon tax penalties under "
+            f"tightening emissions regulations in major trade corridors."
+        )
+    
+    # Check if a faster alternative exists but wasn't chosen
+    min_time_route = min(other_routes.items(), key=lambda x: x[1].time)
+    if min_time_route[1].time < chosen_scores.time * 0.6:
+        critiques.append(
+            f"A significantly faster alternative ({min_time_route[0]}) was rejected despite offering "
+            f"substantially shorter transit time, which in time-sensitive disruption scenarios could "
+            f"mean the difference between supply continuity and production line shutdowns."
+        )
+    
+    # Pick the most impactful critique, or fall back to mode-specific risk
+    if critiques:
+        return critiques[0]
+    
+    # Fall back to mode-specific operational risk analysis
+    chosen_mode = None
+    if routes_dict and chosen_id in routes_dict:
+        chosen_mode = routes_dict[chosen_id].mode
+    else:
+        # Try to determine mode from route_id patterns
+        for mode_key in mode_risks:
+            if mode_key in chosen_id.lower():
+                chosen_mode = mode_key
+                break
+    
+    if chosen_mode and chosen_mode in mode_risks:
+        return mode_risks[chosen_mode]
+    
+    return (
+        "While the chosen route may appear optimal on aggregate metrics, the justification does not "
+        "adequately address scenario-specific vulnerabilities such as single-carrier dependency, "
+        "corridor congestion during peak disruption periods, or the cascading impact of secondary delays "
+        "on downstream supply chain commitments."
+    )
 
 def answer_followup(question: str, result: TradeOffResult, traces: List[ToolTrace]) -> str:
     llm = get_llm()

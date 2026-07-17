@@ -12,10 +12,6 @@ load_dotenv()
 st.set_page_config(page_title="AeroTrade XAI", layout="wide")
 st.title("AeroTrade XAI: Autonomous Supply Chain Orchestrator")
 
-if not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY") and not os.getenv("HUGGINGFACEHUB_API_TOKEN"):
-    st.error("Please set either OPENAI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, or HUGGINGFACEHUB_API_TOKEN in your .env file.")
-    st.stop()
-
 st.sidebar.subheader("Route Selection")
 
 origins = set()

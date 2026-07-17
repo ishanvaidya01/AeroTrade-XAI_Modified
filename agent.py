@@ -18,8 +18,15 @@ def get_llm():
     elif os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0)
+    
+    # Fallback to UncloseAI free endpoint
     from langchain_openai import ChatOpenAI
-    return ChatOpenAI(model="gpt-4o", temperature=0)
+    return ChatOpenAI(
+        model="Lorbus/Qwen3.6-27B-int4-AutoRound",
+        api_key="empty",
+        base_url="https://hermes.ai.unturf.com/v1",
+        temperature=0
+    )
 
 def run_agent(scenario: Dict[str, Any], routes: List[RouteOption], trace_callback: Callable[[ToolTrace], None]) -> TradeOffResult:
     llm = get_llm()
